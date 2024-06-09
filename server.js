@@ -22,6 +22,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+app.get("/", (req, res) => {
+  res.json({ user: "Phil the Vogel" });
+});
+
 app.post("/skizzen", upload.single("image"), (req, res) => {
   console.log("Bild erhalten:", req.file.path);
   // Hier könntest du den Pfad des Bildes in der Datenbank speichern oder direkt eine URL zurückgeben
