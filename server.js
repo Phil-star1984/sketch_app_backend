@@ -1,8 +1,14 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import { fileURLToPath } from "url";
 import multer from "multer";
-const port = 3000;
+import fs from "fs";
+
+const port = process.env.PORT || 3000;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -23,7 +29,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 app.get("/", (req, res) => {
-  res.json({ user: "Phil the Vogel" });
+  res.json({ response: "Server works" });
 });
 
 app.post("/skizzen", upload.single("image"), (req, res) => {
@@ -34,6 +40,23 @@ app.post("/skizzen", upload.single("image"), (req, res) => {
     filePath: req.file.path,
   });
 });
+
+app.get("/uploads", (req, res) => {
+  fs.readdir(path.join(__dirname, "uploads"), (err, files) => {
+    if (err) {
+      console.log(err);
+      res.status(500).json({ error: "Failed to list files" });
+      return;
+    }
+    const baseURL = `${req.protocol}://${req.get("host")}`;
+    res.json({
+      files: files.map((file) => `${baseURL}/uploads/${file}`),
+    });
+  });
+});
+
+// Um die gespeicherten statischen Bilder im Frontend anzuzeigen
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.listen(port, () => {
   console.log(`Server started on http://localhost:${port}`);
