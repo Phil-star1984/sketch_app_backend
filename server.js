@@ -4,11 +4,30 @@ import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import fs from "fs";
+import sketchRoute from "./routes/sketchRoutes.js";
+/* import { PrismaClient } from "@prisma/client"; */
+
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const port = process.env.PORT || 3000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const bucketName = process.env.BUCKET_NAME;
+const bucketRegion = process.env.BUCKET_REGION;
+const accessKey = process.env.ACCESS_KEY;
+const secretAccessKey = process.env.SECRET_ACCESS_KEY;
+
+const s3 = new S3Client({
+  credentials: {
+    accessKeyId: accessKey,
+    secretAccessKey: secretAccessKey,
+  },
+  region: bucketRegion,
+});
+
+/* const prisma = new PrismaClient(); */
 
 const app = express();
 app.use(cors());
@@ -16,31 +35,34 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Konfiguration für Multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    // Generieren eines einzigartigen Namens mit einem Zeitstempel
-    const uniqueSuffix = Date.now() + "_" + file.originalname;
-    cb(null, uniqueSuffix);
-  },
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // Route zum testen
-app.get("/", (req, res) => {
-  res.json({ response: "Server works" });
-});
+app.use("/api/sketches", sketchRoute);
 
 // Route um Skizzen im File Sytem zu speichern
-app.post("/skizzen", upload.single("image"), (req, res) => {
-  console.log("Bild erhalten:", req.file.path);
-  // Hier könntest du den Pfad des Bildes in der Datenbank speichern oder direkt eine URL zurückgeben
+app.post("/skizzen", upload.single("image"), async (req, res) => {
+  console.log(req.file.path);
+  console.log(req.body);
+  console.log(req.file.buffer);
+
+  req.file.buffer;
+
+  const params = {
+    Bucket: bucketName,
+    Key: req.file.originalname,
+    Body: req.file.buffer,
+    ContentType: req.file.mimetype,
+  };
+
+  const command = new PutObjectCommand(params);
+  await s3.send(command);
+
   res.json({
     message: "Bild erfolgreich erhalten und gespeichert",
     filePath: req.file.path,
+    buffer: req.file.buffer,
   });
 });
 
