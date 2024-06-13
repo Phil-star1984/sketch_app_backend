@@ -7,12 +7,15 @@ import fs from "fs";
 import sketchRoute from "./routes/sketchRoutes.js";
 /* import { PrismaClient } from "@prisma/client"; */
 
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const port = process.env.PORT || 3000;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const bucketName = process.env.BUCKET_NAME;
 const bucketRegion = process.env.BUCKET_REGION;
@@ -43,15 +46,12 @@ app.use("/api/sketches", sketchRoute);
 
 // Route um Skizzen im File Sytem zu speichern
 app.post("/skizzen", upload.single("image"), async (req, res) => {
-  console.log(req.file.path);
-  console.log(req.body);
   console.log(req.file.buffer);
-
-  req.file.buffer;
+  const newFilename = Date.now() + "_" + req.file.originalname;
 
   const params = {
     Bucket: bucketName,
-    Key: req.file.originalname,
+    Key: newFilename,
     Body: req.file.buffer,
     ContentType: req.file.mimetype,
   };
@@ -60,29 +60,37 @@ app.post("/skizzen", upload.single("image"), async (req, res) => {
   await s3.send(command);
 
   res.json({
-    message: "Bild erfolgreich erhalten und gespeichert",
-    filePath: req.file.path,
-    buffer: req.file.buffer,
+    message: "Bild erfolgreich erhalten und in Amazon S3 gespeichert",
   });
 });
 
-// Route um alle Skizzen im File Sytem abzurufen
-app.get("/uploads", (req, res) => {
-  fs.readdir(path.join(__dirname, "uploads"), (err, files) => {
-    if (err) {
-      console.log(err);
-      res.status(500).json({ error: "Failed to list files" });
-      return;
-    }
-    const baseURL = `${req.protocol}://${req.get("host")}`;
-    res.json({
-      files: files.map((file) => `${baseURL}/uploads/${file}`),
-    });
-  });
-});
+// Route um alle Skizzen von Amazon S3 abzurufen
+app.get("/uploads", async (req, res) => {
+  const params = {
+    Bucket: bucketName,
+  };
 
-// Um die gespeicherten statischen Bilder im Frontend anzuzeigen
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+  try {
+    const command = new ListObjectsV2Command(params);
+    const { Contents } = await s3.send(command);
+    const urls = await Promise.all(
+      Contents.map(async (file) => {
+        const urlParams = {
+          Bucket: bucketName,
+          Key: file.Key,
+        };
+        const getUrlCommand = new GetObjectCommand(urlParams);
+        const url = await getSignedUrl(s3, getUrlCommand, { expiresIn: 3600 }); // URL expires in 1 hour
+        return { name: file.Key, url };
+      })
+    );
+
+    res.json(urls);
+  } catch (error) {
+    console.error("Error fetching objects:", error);
+    res.status(500).send("Failed to retrieve images from S3");
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server started on http://localhost:${port}`);
