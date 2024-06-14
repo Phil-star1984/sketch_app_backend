@@ -92,11 +92,6 @@ export const deleteSketch = async (req, res) => {
 
   try {
     const response = await s3.send(new DeleteObjectCommand(command));
-    // Check if the HTTP status code exists in the metadata
-    const statusCode =
-      response["$metadata"] && response["$metadata"].httpStatusCode
-        ? response["$metadata"].httpStatusCode
-        : 200; // Default to 200 if not found
 
     res
       .status(200)
