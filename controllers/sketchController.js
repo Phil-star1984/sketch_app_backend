@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   ListObjectsV2Command,
   GetObjectCommand,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import multer from "multer";
@@ -77,5 +78,31 @@ export const getAllSketches = async (req, res) => {
   } catch (error) {
     console.error("Error fetching objects from S3:", error);
     res.status(500).send("Failed to retrieve images from S3");
+  }
+};
+
+export const deleteSketch = async (req, res) => {
+  const { sketchId } = req.params;
+  console.log(sketchId);
+
+  const command = {
+    Bucket: bucketName,
+    Key: sketchId,
+  };
+
+  try {
+    const response = await s3.send(new DeleteObjectCommand(command));
+    // Check if the HTTP status code exists in the metadata
+    const statusCode =
+      response["$metadata"] && response["$metadata"].httpStatusCode
+        ? response["$metadata"].httpStatusCode
+        : 200; // Default to 200 if not found
+
+    res
+      .status(200)
+      .send({ message: `Success: deleting file ${sketchId} from server` });
+  } catch (error) {
+    console.error("Failed to delete from Amazon S3 Bucket:", error);
+    res.status(500).send("Failed to delete sketch");
   }
 };
